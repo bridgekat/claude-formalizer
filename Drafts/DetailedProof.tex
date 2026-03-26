@@ -1,0 +1,298 @@
+\documentclass{article}
+\usepackage{amsmath, amsthm, amssymb}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+
+\title{Detailed Proof: Large $\varepsilon$-Light Vertex Subsets\\
+\normalsize Adapted for Lean~4 / Mathlib Formalization}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Overview}
+
+We prove: there exists $c > 0$ such that for every simple graph $G = (V,E)$ and every
+$\varepsilon \in [0,1]$, there exists $S \subseteq V$ with $|S| \ge c\varepsilon|V|$ and
+$\varepsilon L_G - L_{G_S} \succeq 0$, where $L_G$ is the Laplacian of $G$ and
+$G_S = (V, E(S,S))$ retains only edges within $S$. We use $c = 1/256$.
+
+The proof is organized into files matching the Lean formalization.
+
+\section{Definitions (Defs.lean)}
+
+\begin{definition}[Edge restriction]
+For $G = (V,E)$ and $S \subseteq V$, define
+$G_S = (V, E(S,S))$ where $E(S,S) = \{uv \in E : u \in S, v \in S\}$.
+In Lean: \texttt{SimpleGraph.edgesWithin G S}.
+\end{definition}
+
+\begin{definition}[$\varepsilon$-lightness]
+$S$ is $\varepsilon$-light if $(\varepsilon L_G - L_{G_S})$ is positive semidefinite.
+In Lean: \texttt{SimpleGraph.IsEpsilonLight G $\varepsilon$ S}.
+\end{definition}
+
+Mathlib provides: \texttt{SimpleGraph.lapMatrix}, \texttt{Matrix.PosSemidef},
+\texttt{posSemidef\_lapMatrix}, \texttt{isHermitian\_lapMatrix}.
+
+\section{Trace and Loewner Order (TraceLoewner.lean)}
+
+\begin{lemma}[Trace monotonicity]\label{lem:tracemono}
+If $A \preceq B$ (Loewner) and $C \succeq 0$, then $\mathrm{tr}(AC) \le \mathrm{tr}(BC)$.
+\end{lemma}
+\begin{proof}
+$B - A \succeq 0$ and $C \succeq 0$. Write $C = R^T R$ (Cholesky/square root).
+Then $\mathrm{tr}((B-A)C) = \mathrm{tr}(R(B-A)R^T) \ge 0$ since $R(B-A)R^T \succeq 0$.
+Hence $\mathrm{tr}(BC) - \mathrm{tr}(AC) = \mathrm{tr}((B-A)C) \ge 0$.
+
+\emph{Alternative (spectral):} Diagonalize $B - A = P\Lambda P^T$ with $\Lambda \ge 0$.
+Then $\mathrm{tr}((B-A)C) = \mathrm{tr}(\Lambda P^T C P) = \sum_i \lambda_i (P^T C P)_{ii} \ge 0$
+since $\lambda_i \ge 0$ and $(P^T C P)_{ii} \ge 0$ (diagonal of PSD).
+\end{proof}
+
+\begin{lemma}[PSD eigenvalue bound]\label{lem:eigbound}
+If $K \succeq 0$ and $\mathrm{tr}(K) < 1$, then every eigenvalue of $K$ is $< 1$.
+\end{lemma}
+\begin{proof}
+Each eigenvalue $\mu_i \ge 0$ and $\sum_i \mu_i = \mathrm{tr}(K) < 1$.
+Since $\mu_i \ge 0$, we have $\mu_i \le \sum_j \mu_j < 1$.
+\end{proof}
+
+\begin{lemma}[Resolvent Loewner bound]\label{lem:resolvent}
+If $K \succeq 0$ with $\mathrm{tr}(K) < 1$, then
+$(I - K)^{-1} \preceq \frac{1}{1 - \mathrm{tr}(K)} I$.
+\end{lemma}
+\begin{proof}
+Diagonalize $K$ with eigenvalues $\mu_i \in [0,1)$.
+$(I-K)^{-1}$ has eigenvalues $\frac{1}{1-\mu_i}$.
+Since $\mu_i \le \mathrm{tr}(K)$, we get $\frac{1}{1-\mu_i} \le \frac{1}{1-\mathrm{tr}(K)}$.
+So $(I-K)^{-1} \preceq \frac{1}{1-\mathrm{tr}(K)} I$.
+\end{proof}
+
+\section{PSD Square Root (PSDSqrt.lean)}
+
+\begin{lemma}[PSD square root]\label{lem:sqrt}
+Every PSD matrix $B$ has a PSD square root: $\exists C \succeq 0$, $C^2 = B$.
+Moreover $C$ commutes with $B$ and is symmetric.
+\end{lemma}
+\begin{proof}
+Use the spectral theorem (\texttt{IsHermitian.spectral\_theorem}):
+$B = U \Lambda U^T$ with $\Lambda = \mathrm{diag}(\lambda_1, \ldots, \lambda_d)$, $\lambda_i \ge 0$.
+Define $C = U \mathrm{diag}(\sqrt{\lambda_1}, \ldots, \sqrt{\lambda_d}) U^T$.
+Then $C \succeq 0$, $C^T = C$, $C^2 = U \Lambda U^T = B$.
+
+In Lean: can use \texttt{IsHermitian.eigenvectorUnitary} and
+\texttt{PosSemidef.eigenvalues\_nonneg}.
+\end{proof}
+
+\section{Barrier Potential and Lemma (BarrierLemma.lean)}
+
+\begin{definition}[Barrier potential]
+For $M \prec uI$ (i.e., $(uI - M) \succ 0$), define
+$\Phi_u(M) := \mathrm{tr}((uI - M)^{-1})$.
+\end{definition}
+
+\begin{lemma}[Potential drop]\label{lem:drop}
+If $M \prec uI$ and $u' = u + \delta$ with $\delta > 0$, let $U = (u'I - M)^{-1}$. Then
+$\Phi_u(M) - \Phi_{u'}(M) \ge \delta \cdot \mathrm{tr}(U^2)$.
+\end{lemma}
+\begin{proof}
+Diagonalize $M$ with eigenvalues $\lambda_j < u$:
+$\Phi_u(M) - \Phi_{u'}(M) = \sum_j \frac{\delta}{(u - \lambda_j)(u' - \lambda_j)}
+\ge \sum_j \frac{\delta}{(u' - \lambda_j)^2} = \delta \cdot \mathrm{tr}(U^2)$.
+The inequality uses $u - \lambda_j \le u' - \lambda_j$ (since $u \le u'$).
+\end{proof}
+
+\begin{lemma}[One-sided barrier lemma]\label{lem:barrier}
+Assume $M \prec uI$, $u' > u$, $B \succeq 0$, and $U = (u'I - M)^{-1}$.
+If
+\[
+  \mathrm{tr}(BU) + \frac{\mathrm{tr}(BU^2)}{\Phi_u(M) - \Phi_{u'}(M)} \le 1,
+\]
+then $M + B \prec u'I$ and $\Phi_{u'}(M+B) \le \Phi_u(M)$.
+\end{lemma}
+\begin{proof}
+Let $C$ be the PSD square root of $B$ (Lemma~\ref{lem:sqrt}), so $B = C^2$.
+Let $K = CUC \succeq 0$. Then $\mathrm{tr}(K) = \mathrm{tr}(CUC) = \mathrm{tr}(BU)$.
+
+\emph{Step 1: $\mathrm{tr}(K) < 1$.}
+If $\mathrm{tr}(BU^2) > 0$, the barrier condition gives $\mathrm{tr}(BU) < 1$.
+If $\mathrm{tr}(BU^2) = 0$: since $U \succ 0$, $\mathrm{tr}(CU^2 C) = 0$ implies $UC = 0$,
+so $B = C^2$ and $BU = C(CU) = 0$, giving $\mathrm{tr}(K) = 0 < 1$.
+
+\emph{Step 2: $M + B \prec u'I$.}
+Since $K \succeq 0$ with $\mathrm{tr}(K) < 1$, all eigenvalues of $K$ are $< 1$
+(Lemma~\ref{lem:eigbound}), so $I - K$ is invertible.
+Algebraic identity (verified by multiplication):
+\[
+  (u'I - M - B)^{-1} = U + UC(I - K)^{-1}CU.
+\]
+Since the right side is PSD (sum of PSD terms), $(u'I - M - B)$ is positive definite,
+i.e., $M + B \prec u'I$.
+
+\emph{Step 3: Potential bound.}
+Taking traces: $\Phi_{u'}(M+B) = \mathrm{tr}(U) + \mathrm{tr}(UC(I-K)^{-1}CU)$.
+By cyclic trace: $\mathrm{tr}(UC(I-K)^{-1}CU) = \mathrm{tr}(CU^2 C(I-K)^{-1})$.
+By Lemma~\ref{lem:tracemono} (trace monotonicity) with
+$(I-K)^{-1} \preceq \frac{1}{1-\mathrm{tr}(K)} I$ (Lemma~\ref{lem:resolvent}):
+\[
+  \mathrm{tr}(CU^2 C (I-K)^{-1}) \le \frac{\mathrm{tr}(BU^2)}{1 - \mathrm{tr}(BU)}.
+\]
+So $\Phi_{u'}(M+B) \le \Phi_{u'}(M) + \frac{\mathrm{tr}(BU^2)}{1 - \mathrm{tr}(BU)}$.
+The barrier condition rearranges to: RHS $\le \Phi_u(M)$. Hence $\Phi_{u'}(M+B) \le \Phi_u(M)$.
+\end{proof}
+
+\section{BSS Coloring Theorem (Coloring.lean)}
+
+\begin{theorem}[BSS Coloring]\label{thm:bss}
+Let $G = (V,E)$ with $n = |V| \ge 4$. Let $\{A_e\}_{e \in E}$ be PSD $d \times d$
+matrices with $\sum_{e \in E} A_e = I_d$ and $d \le n$. For $\varepsilon \in (0,1]$,
+there exists $S \subseteq V$ with $|S| \ge \varepsilon n / 256$ such that
+$\sum_{e \in E(S,S)} A_e \preceq \varepsilon I$.
+\end{theorem}
+
+\begin{proof}
+Set $r = \lceil 16/\varepsilon \rceil$, $u_0 = \varepsilon/2$, $\delta = \varepsilon/n$,
+$k = \lfloor n/4 \rfloor$.
+
+\emph{Coloring process.} Build a coloring of $k$ vertices with $r$ colors, maintaining:
+\begin{equation}\label{eq:invariant}
+M_t \prec u_t I \quad\text{and}\quad \Phi_{u_t}(M_t) \le d/u_0,
+\end{equation}
+where $u_t = u_0 + t\delta$ and $M_t = \sum_{\text{monochromatic edges among colored vertices}} A_e$.
+
+Base case ($t = 0$): $M_0 = 0 \prec u_0 I$ and $\Phi_{u_0}(0) = d/u_0$. \checkmark
+
+\emph{Inductive step.} Given the invariant at time $t < k$, let $R$ be the $m = n - t$
+uncolored vertices. For $v \in R$ and color $\gamma$, let $B_v^\gamma$ be the increment
+from coloring $v$ with $\gamma$. Average the barrier expression over all $(v,\gamma) \in R \times [r]$:
+
+Key bound: $\sum_{v,\gamma} B_v^\gamma \preceq I$ (sub-sum of $\{A_e\}$).
+This gives: average barrier expression $\le \frac{d/u_0}{mr} + \frac{1}{\delta m r}$.
+
+Using $m \ge 3n/4$, $d \le n$, $r \ge 16/\varepsilon$:
+\[
+  \frac{d/u_0}{mr} \le \frac{n/(\varepsilon/2)}{(3n/4)(16/\varepsilon)} = \frac{1}{6}, \quad
+  \frac{1}{\delta mr} \le \frac{1}{(\varepsilon/n)(3n/4)(16/\varepsilon)} = \frac{1}{12}.
+\]
+Sum $= 1/6 + 1/12 = 1/4 < 1$. So some $(v,\gamma)$ satisfies the barrier condition.
+Apply Lemma~\ref{lem:barrier} to propagate the invariant.
+
+\emph{Extraction.} After $k$ steps: $M_k \preceq u_k I$ with
+$u_k = u_0 + k\delta \le \varepsilon/2 + \varepsilon/4 = 3\varepsilon/4$.
+By pigeonhole, the largest color class $S$ among $k$ colored vertices has
+$|S| \ge k/r$. Each color class's contribution is $\preceq M_k \preceq (3\varepsilon/4)I \preceq \varepsilon I$.
+
+\emph{Size bound.}
+$k = \lfloor n/4 \rfloor \ge n/8$ (for $n \ge 4$).
+$r = \lceil 16/\varepsilon \rceil \le 32/\varepsilon$ (for $\varepsilon \le 1$).
+So $|S| \ge k/r \ge (n/8)/(32/\varepsilon) = \varepsilon n / 256$.
+\end{proof}
+
+\section{Spectral Normalization (Connection.lean)}
+
+\begin{proposition}[Normalization]\label{prop:normalize}
+Let $L = L_G$ with spectral decomposition $L = \sum_{i=1}^d \lambda_i v_i v_i^T$
+($\lambda_i > 0$, $v_i$ orthonormal). Define the $d \times d$ matrices:
+\[
+  (A_e)_{ij} = \frac{(v_i^T (e_u - e_v))(v_j^T (e_u - e_v))}{\sqrt{\lambda_i \lambda_j}}
+  \quad\text{for edge } e = \{u,v\}.
+\]
+Then $A_e \succeq 0$ and $\sum_{e \in E} A_e = I_d$.
+\end{proposition}
+\begin{proof}
+$A_e = w_e w_e^T$ where $(w_e)_i = (v_i^T(e_u - e_v))/\sqrt{\lambda_i}$. So $A_e \succeq 0$.
+$\sum_e A_e = \sum_e w_e w_e^T$. Entry $(i,j)$:
+$\sum_e \frac{v_i^T L_e v_j}{\sqrt{\lambda_i \lambda_j}}
+= \frac{v_i^T L v_j}{\sqrt{\lambda_i \lambda_j}}
+= \frac{\lambda_i \delta_{ij}}{\sqrt{\lambda_i \lambda_j}} = \delta_{ij}$.
+\end{proof}
+
+\begin{proposition}[Connection]\label{prop:connect}
+If $\sum_{e \in E(S,S)} A_e \preceq \varepsilon I_d$, then $\varepsilon L - L_S \succeq 0$.
+\end{proposition}
+\begin{proof}
+For $x \in \mathrm{range}(L)$: write $y_i = v_i^T x / \sqrt{\lambda_i}$ (so $y \in \mathbb{R}^d$).
+Then $x^T L_S x = \sum_{e \in E(S,S)} (x^T(e_u - e_v))^2 = y^T (\sum_{E(S,S)} A_e) y
+\le \varepsilon \|y\|^2 = \varepsilon \sum_i (v_i^T x)^2 / \lambda_i$.
+And $x^T L x = \sum_i \lambda_i (v_i^T x)^2$. For $x \in \mathrm{range}(L)$,
+$x = \sum_i (v_i^T x) v_i$, so $\varepsilon x^T L x = \varepsilon \sum_i \lambda_i (v_i^T x)^2$.
+Since $\lambda_i > 0$: $\varepsilon (v_i^T x)^2 / \lambda_i \cdot \lambda_i = \varepsilon (v_i^T x)^2$.
+
+Actually: $x^T L_S x = y^T(\sum A_e)y \le \varepsilon \|y\|^2$, and
+$\varepsilon x^T L x = \varepsilon \sum_i \lambda_i (v_i^T x)^2$,
+$\|y\|^2 = \sum_i (v_i^T x)^2/\lambda_i$.
+We need $\sum_i (v_i^T x)^2/\lambda_i \le \sum_i \lambda_i (v_i^T x)^2$?
+No, that's not right.
+
+\emph{Corrected argument:} Let $P$ be the matrix with columns $v_1/\sqrt{\lambda_1}, \ldots, v_d/\sqrt{\lambda_d}$.
+Then $y = P^T x$ and $x^T L_S x = y^T (\sum_{E(S,S)} A_e) y \le \varepsilon \|y\|^2 = \varepsilon x^T P P^T x$.
+Now $PP^T = \sum_i v_i v_i^T / \lambda_i = L^{-1}|_{\mathrm{range}(L)}$. So
+$x^T L_S x \le \varepsilon x^T L^{-1} x$.
+That's not what we want. Let me redo.
+
+\emph{Correct normalization:} Let $Q$ be the matrix with columns $\sqrt{\lambda_1} v_1, \ldots, \sqrt{\lambda_d} v_d$.
+No---use $P$ with columns $v_1, \ldots, v_d$ and $\Lambda = \mathrm{diag}(\lambda_i)$.
+Define $\tilde{A}_e = \Lambda^{-1/2} P^T L_e P \Lambda^{-1/2}$ (a $d \times d$ matrix).
+Then $\sum_e \tilde{A}_e = \Lambda^{-1/2} P^T L P \Lambda^{-1/2} = \Lambda^{-1/2} \Lambda \Lambda^{-1/2} = I_d$.
+And $\tilde{A}_e \succeq 0$.
+
+If $\sum_{E(S,S)} \tilde{A}_e \preceq \varepsilon I_d$, then for $z \in \mathbb{R}^d$:
+$z^T (\sum_{E(S,S)} \tilde{A}_e) z \le \varepsilon \|z\|^2$.
+Set $z = \Lambda^{1/2} P^T x$ for $x \in \mathrm{range}(L)$. Then:
+LHS $= x^T P \Lambda^{1/2} (\sum \tilde{A}_e) \Lambda^{1/2} P^T x = x^T P (\sum P^T L_e P) P^T x = x^T L_S x$
+(since $P P^T$ is projection onto range and $L_S$ maps range to range? Need care.)
+
+Actually: $P \Lambda^{1/2} \tilde{A}_e \Lambda^{1/2} P^T = P \Lambda^{1/2} \Lambda^{-1/2} P^T L_e P \Lambda^{-1/2} \Lambda^{1/2} P^T = P P^T L_e P P^T$.
+And $PP^T = \Pi$ (projection onto $\mathrm{range}(L)$).
+So LHS $= x^T \Pi L_S \Pi x$. For $x \in \mathrm{range}(L)$: $\Pi x = x$, so LHS $= x^T L_S \Pi x$.
+But $L_S \Pi x$ may not equal $L_S x$ unless $\Pi$ commutes with $L_S$... which it doesn't in general.
+
+Hmm. But $x^T \Pi L_S \Pi x = (\Pi x)^T L_S (\Pi x) = x^T L_S x$ since $\Pi x = x$
+and $L_S$ is just applied to $\Pi x = x$. Wait: $x^T \Pi L_S \Pi x = x^T L_S x$ when $\Pi x = x$.
+Yes! Because $\Pi$ is the identity on $\mathrm{range}(L)$.
+
+RHS $= \varepsilon \|z\|^2 = \varepsilon \|\Lambda^{1/2} P^T x\|^2 = \varepsilon x^T P \Lambda P^T x = \varepsilon x^T L x$.
+
+So for $x \in \mathrm{range}(L)$: $x^T L_S x \le \varepsilon x^T L x$. \checkmark
+
+For $x \in \ker(L)$: $x$ is constant on each connected component of $G$.
+Each edge of $G_S$ has both endpoints in the same component, so $x_u = x_v$ for each edge
+$\{u,v\} \in E(S,S)$. Hence $x^T L_S x = 0 = \varepsilon \cdot 0 = \varepsilon x^T L x$. \checkmark
+
+For general $x$: decompose $x = x_r + x_k$ with $x_r \in \mathrm{range}(L)$, $x_k \in \ker(L)$.
+Cross terms vanish: $x_k^T L x_r = 0$ (since $L x_k = 0$) and
+$x_k^T L_S x_r = (L_S x_k)^T x_r = 0$ (since $L_S x_k = 0$).
+So $x^T(\varepsilon L - L_S)x = x_r^T(\varepsilon L - L_S)x_r \ge 0$. \checkmark
+\end{proof}
+
+\section{Main Theorem (Main.lean)}
+
+\begin{theorem}[Main]
+For every simple graph $G = (V,E)$ and $\varepsilon \in [0,1]$, there exists
+$S \subseteq V$ with $|S| \ge \varepsilon|V|/256$ and $\varepsilon L_G - L_{G_S} \succeq 0$.
+\end{theorem}
+\begin{proof}
+\emph{Case 1: $\varepsilon = 0$.} Take $S = \emptyset$. Size $0 \ge 0$. PSD: $0 \succeq 0$. \checkmark
+
+\emph{Case 2: $G$ has no edges.} Take $S = V$. $L_G = 0$ and $L_{G_S} = 0$.
+PSD: $0 \succeq 0$. Size: $|V| \ge \varepsilon|V|/256$. \checkmark
+
+\emph{Case 3: $|V| \le 3$.} Take $S = \{v\}$ (any vertex). $L_{G_S} = 0$.
+PSD: $\varepsilon L_G \succeq 0$. Size: $1 \ge \varepsilon \cdot 3 / 256$. \checkmark
+
+\emph{Case 4: $|V| \ge 4$, $\varepsilon > 0$, $G$ has edges.}
+Let $d = \mathrm{rank}(L_G) > 0$. Define $\tilde{A}_e$ as in Proposition~\ref{prop:normalize}.
+Apply Theorem~\ref{thm:bss} with $n = |V|$, $d$, $\varepsilon$, and the matrices $\tilde{A}_e$.
+Obtain $S$ with $|S| \ge \varepsilon n/256$ and $\sum_{E(S,S)} \tilde{A}_e \preceq \varepsilon I_d$.
+By Proposition~\ref{prop:connect}, $\varepsilon L_G - L_{G_S} \succeq 0$. \checkmark
+\end{proof}
+
+\end{document}
