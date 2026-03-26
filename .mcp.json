@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "lean-lsp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bridgekat/lean-lsp-mcp@a146704553a97f36af4975e182f1c7af305fa3c5",
+        "lean-lsp-mcp"
+      ],
+      "env": {}
+    }
+  }
+}
