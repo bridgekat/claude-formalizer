@@ -72,13 +72,7 @@ lemma Subgroup.conjBy_eq_of_mem (H : Subgroup G) {g : G} (hg : g ∈ H) :
 /-- Double conjugation. -/
 lemma Subgroup.conjBy_conjBy (K : Subgroup G) (g h : G) :
     (K.conjBy g).conjBy h = K.conjBy (h * g) := by
-  ext x
-  simp only [Subgroup.mem_conjBy]
-  constructor
-  · intro hx
-    convert hx using 1; group
-  · intro hx
-    convert hx using 1; group
+  ext x; simp only [Subgroup.mem_conjBy]; exact iff_of_eq (congr_arg (· ∈ K) (by group))
 
 /-- Conjugating by 1 is the identity. -/
 @[simp]
@@ -209,8 +203,7 @@ noncomputable def oIndex (J : Subgroup G) : ℕ :=
 
 /-- The O-index is always positive. -/
 theorem oIndex_pos (J : Subgroup G) : 0 < O.oIndex J := by
-  unfold oIndex
-  simp only [Subgroup.relIndex]
+  simp only [oIndex, Subgroup.relIndex]
   exact Nat.pos_of_ne_zero Subgroup.FiniteIndex.index_ne_zero
 
 /-- The O-index is invariant under conjugation. -/
@@ -229,10 +222,8 @@ theorem oIndex_conjBy (J : Subgroup G) (g : G) :
 
 /-- The O-index of the trivial group is 1. -/
 theorem oIndex_bot : O.oIndex (⊥ : Subgroup G) = 1 := by
-  unfold oIndex
-  -- minAdmissible ⊥ ≤ ⊥, so minAdmissible ⊥ = ⊥
-  have h : O.minAdmissible ⊥ = ⊥ := le_antisymm (O.minAdmissible_le_self ⊥) bot_le
-  rw [h, Subgroup.relIndex_bot_right]
+  show (O.minAdmissible ⊥).relIndex ⊥ = 1
+  rw [le_antisymm (O.minAdmissible_le_self ⊥) bot_le, Subgroup.relIndex_bot_right]
 
 end MinAdmissible
 
