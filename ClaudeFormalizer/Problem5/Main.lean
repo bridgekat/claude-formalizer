@@ -49,7 +49,7 @@ variable [S : SliceFramework G]
 private lemma ceil_div_le_ceil_div_of_le {a b : ℕ} {d : ℕ} (hab : a ≤ b)
     (hd : 0 < d) :
     ⌈((a : ℚ) / (d : ℚ))⌉ ≤ ⌈((b : ℚ) / (d : ℚ))⌉ := by
-  sorry
+  gcongr
 
 /-! ### Necessity: forward direction -/
 
